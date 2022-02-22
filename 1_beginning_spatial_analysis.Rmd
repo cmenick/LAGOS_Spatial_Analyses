@@ -1,7 +1,7 @@
 ---
 title: "LAGOS Spatial Analysis"
-author: "Matthew Ross"
-date: "9/11/2019"
+author: "Casey Menick"
+date: "02/21/2022"
 output: html_document
 editor_options: 
   chunk_output_type: console
@@ -36,9 +36,6 @@ lagos <- lagosne_load()
 
 #Grab the lake centroid info
 lake_centers <- lagos$locus
-
-
-
 ```
 
 
@@ -46,13 +43,13 @@ lake_centers <- lagos$locus
 ### Convert to spatial data
 ```{r}
 #Look at the column names
-#names(lake_centers)
+names(lake_centers)
 
 #Look at the structure
-#str(lake_centers)
+str(lake_centers)
 
 #View the full dataset
-#View(lake_centers %>% slice(1:100))
+View(lake_centers %>% slice(1:100))
 
 spatial_lakes <- st_as_sf(lake_centers,coords=c('nhd_long','nhd_lat'),
                           crs=4326) %>%
@@ -100,7 +97,22 @@ minnesota_lakes %>%
 
 ```{r}
 
+ILIA <- states %>%
+  filter(name == 'Illinois' | name == 'Iowa') %>%
+  st_transform(2163)
 
+# view outline of Illinois and Iowa
+mapview(ILIA)
+
+#Subset lakes based on spatial position
+ILIA_lakes <- spatial_lakes[ILIA,] %>% 
+    mutate(lake_area_logha = log(lake_area_ha))
+
+#Plotting the first 1000 lakes
+ILIA_lakes %>%
+  arrange(-lake_area_ha) %>%
+    slice(1:1000) %>%
+  mapview(.,zcol = 'lake_area_ha')
 
 ```
 
@@ -111,6 +123,8 @@ combined? How does this compare to Minnesota?
 
 ```{r}
 
+length(unique(minnesota_lakes$lagoslakeid))
+length(unique(ILIA_lakes$lagoslakeid))
 ```
 
 
@@ -120,20 +134,37 @@ combined? How does this compare to Minnesota?
 y axis (check out geom_histogram)
 
 ```{r}
+#create iowa lakes file
+iowa <- states %>%
+  filter(name == 'Iowa') %>%
+  st_transform(2163)
 
+iowa_lakes <- spatial_lakes[iowa,]
+
+
+#combine ia and mn data, add statename to lake
+MNIA_lakes <- rbind(iowa_lakes %>% mutate(state="Iowa"),minnesota_lakes %>% mutate(state="Minnesota")) %>% 
+  mutate(lake_area_logha = log(lake_area_ha))
+
+ggplot(MNIA_lakes,aes(lake_area_logha)) +
+  geom_histogram() +
+  facet_wrap(~state)
 
 ```
 
 
-## 4) Make an interactive plot of lakes in Iowa and Illinois and color them
-by lake area in hectares
+## 4) Make an interactive plot of lakes in Iowa and Illinois and color them by lake area in hectares
 
 ```{r}
-
+#Plotting the first 1000 lakes
+ILIA_lakes %>%
+  arrange(-lake_area_logha) %>%
+  mapview(.,zcol = 'lake_area_logha')
 ```
 
 
-## 5) What other data sources might we use to understand how reservoirs and 
-natural lakes vary in size in these three states? 
+## 5) What other data sources might we use to understand how reservoirs and natural lakes vary in size in these three states? 
 
+Other data sources could include state records of lakes. 
 
+It would also be interesting to see how sizes of waterbodies vary when comparing reservoirs vs. natural lakes, and what percent of lakes are natural between the three states.
