@@ -43,13 +43,13 @@ lake_centers <- lagos$locus
 ### Convert to spatial data
 ```{r}
 #Look at the column names
-names(lake_centers)
+#names(lake_centers)
 
 #Look at the structure
 str(lake_centers)
 
 #View the full dataset
-View(lake_centers %>% slice(1:100))
+#View(lake_centers %>% slice(1:100))
 
 spatial_lakes <- st_as_sf(lake_centers,coords=c('nhd_long','nhd_lat'),
                           crs=4326) %>%
@@ -118,8 +118,9 @@ ILIA_lakes %>%
 
 
 
-## 2) Subset LAGOS data to these sites, how many sites are in Illinois and Iowa
-combined? How does this compare to Minnesota?
+## 2) Subset LAGOS data to these sites, how many sites are in Illinois and Iowa combined? How does this compare to Minnesota?
+
+Minnesota has many more lakes (29,038) than Illinois and Iowa combined (16,466). That's more than the land of 10,000 lakes!
 
 ```{r}
 
@@ -128,10 +129,9 @@ length(unique(ILIA_lakes$lagoslakeid))
 ```
 
 
+
 ## 3) What is the distribution of lake size in Iowa vs. Minnesota?
 
-- Here I want to see a histogram plot with lake size on x-axis and frequency on 
-y axis (check out geom_histogram)
 
 ```{r}
 #create iowa lakes file
@@ -147,7 +147,7 @@ MNIA_lakes <- rbind(iowa_lakes %>% mutate(state="Iowa"),minnesota_lakes %>% muta
   mutate(lake_area_logha = log(lake_area_ha))
 
 ggplot(MNIA_lakes,aes(lake_area_logha)) +
-  geom_histogram() +
+  geom_histogram(bins=25) +
   facet_wrap(~state)
 
 ```
@@ -165,6 +165,8 @@ ILIA_lakes %>%
 
 ## 5) What other data sources might we use to understand how reservoirs and natural lakes vary in size in these three states? 
 
-Other data sources could include state records of lakes. 
+This analysis has potential to be improved by incorporating other data!
 
-It would also be interesting to see how sizes of waterbodies vary when comparing reservoirs vs. natural lakes, and what percent of lakes are natural between the three states.
+Other data sources could include state records of lakes, satellite imagery of lake boundaries over time, property records, or other research efforts.
+
+It would also be interesting to see how sizes of waterbodies vary when comparing reservoirs vs. natural lakes, and what percent of lakes are natural between the three states. I'd be curious to see if the definition of a "lake" varies between any of these states as well. I'd also like to know how these numbers have changed over time, either in the creation/destruction of lakes, or natural changes to lake boundaries.
