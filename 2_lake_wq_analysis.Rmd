@@ -26,7 +26,7 @@ library(kableExtra)
 
 
 ### First download and then specifically grab the locus (or site lat longs)
-```{r data-read}
+```{r data-read, warnings = FALSE}
 #Lagos download script
 #lagosne_get(dest_folder = LAGOSNE:::lagos_path(),overwrite=T)
 
@@ -125,7 +125,7 @@ mapview(mean_spatial,zcol='log10_mean_chl')
 
 ## 1) What is the correlation between Secchi Disk Depth and Chlorophyll a for sites with at least 200 observations?
 
-Secchi disk depth is negatively exponentially correlation with secchi disk depth. As chlorophyll increases, there becomes a point where very little light is able to penetrate the water beyond a short distance.
+Secchi disk depth is negatively exponentially correlation with secchi disk depth. As chlorophyll increases, there becomes a point where very little light is able to penetrate the water beyond a short distance. At a certain point, it does not matter how much more additional chlorophyll is in the water, as the light cannot penetrate anyway.
 
 ```{r}
 #Your code here
@@ -139,29 +139,18 @@ ggplot(chla_secchi %>%
 
 ## 2) What states have the most data? 
 
-### 2a) First you will need to make a lagos spatial dataset that has the total number of counts per site.
-
-```{r}
-
+```{r, warnings = FALSE}
+# get count for each lake id
 lake_centers <- lake_centers %>%
   group_by(lagoslakeid,nhd_long,nhd_lat,state_zoneid) %>%
   summarise(n=n())
-```
 
+# join data to include state names
 
-### 2b) Second, you will need to join this point dataset to the us_boundaries data. 
-
-```{r}
 lake_states <- lagos$state
-
 lake_statecenters<-left_join(lake_centers,lake_states,"state_zoneid")
 
-```
-
-
-### 2c) Then you will want to group by state and sum all the observations in that state and arrange that data from most to least total observations per state. 
-
-```{r}
+# group by state and summarise to find total count
 lake_obsn <- lake_statecenters %>% 
   group_by(state_name) %>% 
   summarise(n=sum(n)) %>% 
@@ -171,8 +160,10 @@ lake_obsn <- lake_statecenters %>%
 states <- us_states() %>% 
   mutate(state_name=name)
 
+# print table of counts
 kable(lake_obsn)
 
+# make map of counts by state
 lake_statecenterboundaries <- left_join(lake_obsn,states,"state_name") %>% 
   drop_na()
 
@@ -181,7 +172,7 @@ lake_countmap <- st_as_sf(lake_statecenterboundaries)
 mapview(lake_countmap,zcol='n')
 ```
 
-## 3 Is there a spatial pattern in Secchi disk depth for lakes with at least 200 observations?
+## 3) Is there a spatial pattern in Secchi disk depth for lakes with at least 200 observations?
 
 Lakes that were further from urban areas tended to have higher secchi depth disks, indicating clearer water. This could be due to nutrient runoff from high population areas leading to high amounts of chla, and lower visibility in the water.
 

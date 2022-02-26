@@ -26,10 +26,9 @@ library(USAboundaries) #USA states and counties
 
 ### First download and then specifically grab the locus (or site lat longs)
 
-```{r data-read}
+```{r data-read, warnings = FALSE}
 # #Lagos download script
 LAGOSNE::lagosne_get(dest_folder = LAGOSNE:::lagos_path())
-
 
 #Load in lagos
 lagos <- lagosne_load()
@@ -42,14 +41,8 @@ lake_centers <- lagos$locus
 
 ### Convert to spatial data
 ```{r}
-#Look at the column names
-#names(lake_centers)
-
 #Look at the structure
 str(lake_centers)
-
-#View the full dataset
-#View(lake_centers %>% slice(1:100))
 
 spatial_lakes <- st_as_sf(lake_centers,coords=c('nhd_long','nhd_lat'),
                           crs=4326) %>%
@@ -132,6 +125,7 @@ length(unique(ILIA_lakes$lagoslakeid))
 
 ## 3) What is the distribution of lake size in Iowa vs. Minnesota?
 
+There are many more lakes in Minnesota than Iowa. Minnesota lakes are much larger on average and overall have a larger spread of lake size. 
 
 ```{r}
 #create iowa lakes file
@@ -141,14 +135,21 @@ iowa <- states %>%
 
 iowa_lakes <- spatial_lakes[iowa,]
 
+sum(iowa_lakes$lake_area_ha)
+sum(minnesota_lakes$lake_area_ha)
 
 #combine ia and mn data, add statename to lake
-MNIA_lakes <- rbind(iowa_lakes %>% mutate(state="Iowa"),minnesota_lakes %>% mutate(state="Minnesota")) %>% 
+MNIA_lakes <- rbind(iowa_lakes %>% mutate(state="Iowa",total_area=sum(lake_area_ha)),minnesota_lakes %>% mutate(state="Minnesota",total_area=sum(lake_area_ha))) %>% 
   mutate(lake_area_logha = log(lake_area_ha))
-
+           
 ggplot(MNIA_lakes,aes(lake_area_logha)) +
   geom_histogram(bins=25) +
   facet_wrap(~state)
+
+ggplot(MNIA_lakes,aes(lake_area_logha)) +
+  geom_boxplot() +
+  facet_wrap(~state) +
+  coord_flip()
 
 ```
 
