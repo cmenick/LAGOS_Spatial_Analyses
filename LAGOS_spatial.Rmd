@@ -1,0 +1,309 @@
+---
+title: "LAGOS Spatial Analysis"
+author: "Casey Menick"
+date: "02/21/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(tidyverse) # Tidy packages
+library(sf) #Spatial package that can read and create shapefiles 
+library(mapview) #Interactive maps
+library(LAGOSNE) #Lots and lots of clean lake data
+library(USAboundaries) #USA states and counties
+library(lubridate) #For dealing with date and time
+library(kableExtra)
+```
+
+# LAGOS Analysis
+
+## Loading in data
+
+### First download and then specifically grab the locus (or site lat longs)
+
+```{r data-read, warning = FALSE, message=FALSE}
+#Get data
+lagosne_get(dest_folder = LAGOSNE:::lagos_path(),overwrite=T)
+
+#Load in lagos
+lagos <- lagosne_load()
+
+#Grab the lake centroid info
+lake_centers <- lagos$locus
+
+# Make an sf object 
+spatial_lakes <- st_as_sf(lake_centers,coords=c('nhd_long','nhd_lat'),
+                          crs=4326)
+
+#Grab the water quality data
+nutr <- lagos$epi_nutr
+
+```
+
+
+### Convert to spatial data
+```{r}
+#Look at the structure
+str(lake_centers)
+
+spatial_lakes <- st_as_sf(lake_centers,coords=c('nhd_long','nhd_lat'),
+                          crs=4326) %>%
+  st_transform(2163)
+
+#Subset for plotting
+subset_spatial <- spatial_lakes %>%
+  slice(1:100) 
+
+subset_baser <- spatial_lakes[1:100,]
+
+#Dynamic mapviewer
+mapview(subset_spatial)
+
+```
+
+
+### Subset to only Minnesota
+
+```{r}
+states <- us_states()
+
+#Plot all the states to check if they loaded
+#mapview(states)
+minnesota <- states %>%
+  filter(name == 'Minnesota') %>%
+  st_transform(2163)
+
+#Subset lakes based on spatial position
+minnesota_lakes <- spatial_lakes[minnesota,]
+
+#Plotting the first 1000 lakes
+minnesota_lakes %>%
+  arrange(-lake_area_ha) %>%
+    slice(1:1000) %>%
+  mapview(.,zcol = 'lake_area_ha')
+```
+
+
+
+# Project Work
+
+
+## Map outline of Iowa and Illinois 
+
+```{r}
+
+ILIA <- states %>%
+  filter(name == 'Illinois' | name == 'Iowa') %>%
+  st_transform(2163)
+
+# view outline of Illinois and Iowa
+mapview(ILIA)
+
+#Subset lakes based on spatial position
+ILIA_lakes <- spatial_lakes[ILIA,] %>% 
+    mutate(lake_area_logha = log(lake_area_ha))
+
+#Plotting the first 1000 lakes
+ILIA_lakes %>%
+  arrange(-lake_area_ha) %>%
+    slice(1:1000) %>%
+  mapview(.,zcol = 'lake_area_ha')
+
+```
+
+
+
+## Subset LAGOS data to these sites, how many sites are in Illinois and Iowa combined? How does this compare to Minnesota?
+
+Minnesota has many more lakes (29,038) than Illinois and Iowa combined (16,466). That's more than the land of 10,000 lakes!
+
+```{r}
+
+length(unique(minnesota_lakes$lagoslakeid))
+length(unique(ILIA_lakes$lagoslakeid))
+```
+
+
+
+## What is the distribution of lake size in Iowa vs. Minnesota?
+
+There are many more lakes in Minnesota than Iowa. Minnesota lakes are much larger on average and overall have a larger spread of lake size. 
+
+```{r}
+#create iowa lakes file
+iowa <- states %>%
+  filter(name == 'Iowa') %>%
+  st_transform(2163)
+
+iowa_lakes <- spatial_lakes[iowa,]
+
+sum(iowa_lakes$lake_area_ha)
+sum(minnesota_lakes$lake_area_ha)
+
+#combine ia and mn data, add statename to lake
+MNIA_lakes <- rbind(iowa_lakes %>% mutate(state="Iowa",total_area=sum(lake_area_ha)),minnesota_lakes %>% mutate(state="Minnesota",total_area=sum(lake_area_ha))) %>% 
+  mutate(lake_area_logha = log(lake_area_ha))
+           
+ggplot(MNIA_lakes,aes(lake_area_logha)) +
+  geom_histogram(bins=25) +
+  facet_wrap(~state)
+
+ggplot(MNIA_lakes,aes(lake_area_logha)) +
+  geom_boxplot() +
+  facet_wrap(~state) +
+  coord_flip()
+
+```
+
+
+## Plot lakes in Iowa and Illinois and color them by lake area in hectares
+
+```{r}
+#Plotting the first 1000 lakes
+ILIA_lakes %>%
+  arrange(-lake_area_logha) %>%
+  mapview(.,zcol = 'lake_area_logha')
+```
+
+
+## What other data sources might we use to understand how reservoirs and natural lakes vary in size in these three states? 
+
+This analysis has potential to be improved by incorporating other data!
+
+Other data sources could include state records of lakes, satellite imagery of lake boundaries over time, property records, or other research efforts.
+
+It would also be interesting to see how sizes of waterbodies vary when comparing reservoirs vs. natural lakes, and what percent of lakes are natural between the three states. I'd be curious to see if the definition of a "lake" varies between any of these states as well. I'd also like to know how these numbers have changed over time, either in the creation/destruction of lakes, or natural changes to lake boundaries.
+
+
+### Subset columns nutr to only keep key info that we want
+
+```{r}
+clarity_only <- nutr %>%
+  select(lagoslakeid,sampledate,chla,doc,secchi) %>%
+  mutate(sampledate = as.character(sampledate) %>% ymd(.))
+
+```
+
+
+### Keep sites with at least 200 observations 
+
+```{r}
+
+#Look at the number of rows of dataset
+#nrow(clarity_only)
+
+chla_secchi <- clarity_only %>%
+  filter(!is.na(chla),
+         !is.na(secchi))
+
+# How many observatiosn did we lose?
+# nrow(clarity_only) - nrow(chla_secchi)
+
+
+# Keep only the lakes with at least 200 observations of secchi and chla
+chla_secchi_200 <- chla_secchi %>%
+  group_by(lagoslakeid) %>%
+  mutate(count = n()) %>%
+  filter(count > 200)
+
+
+```
+
+
+### Join water quality data to spatial data
+
+```{r}
+spatial_200 <- inner_join(spatial_lakes,chla_secchi_200 %>%
+                            distinct(lagoslakeid,.keep_all=T),
+                          by='lagoslakeid')
+```
+
+### Mean Chl_a map
+
+```{r}
+### Take the mean chl_a and secchi by lake
+
+mean_values_200 <- chla_secchi_200 %>%
+  # Take summary by lake id
+  group_by(lagoslakeid) %>%
+  # take mean chl_a per lake id
+  summarize(mean_chl = mean(chla,na.rm=T),
+            mean_secchi=mean(secchi,na.rm=T)) %>%
+  #Get rid of NAs
+  filter(!is.na(mean_chl),
+         !is.na(mean_secchi)) %>%
+  # Take the log base 10 of the mean_chl
+  mutate(log10_mean_chl = log10(mean_chl))
+
+#Join datasets
+mean_spatial <- inner_join(spatial_lakes,mean_values_200,
+                          by='lagoslakeid') 
+
+#Make a map
+mapview(mean_spatial,zcol='log10_mean_chl')
+
+```
+
+
+## What is the correlation between Secchi Disk Depth and Chlorophyll a for sites with at least 200 observations?
+
+Secchi disk depth is negatively exponentially correlation with secchi disk depth. As chlorophyll increases, there becomes a point where very little light is able to penetrate the water beyond a short distance. At a certain point, it does not matter how much more additional chlorophyll is in the water, as the light cannot penetrate anyway.
+
+```{r}
+#plot correlation between secchi disk depth and chla
+ggplot(chla_secchi %>% 
+         group_by(lagoslakeid) %>% 
+         summarise(meanchla=mean(chla),
+                   meansecchi=mean(secchi)),aes(meanchla,meansecchi)) + 
+  geom_point()
+```
+
+
+## Which states have the most data? 
+
+```{r, warnings = FALSE}
+# get count for each lake id
+lake_centers <- lake_centers %>%
+  group_by(lagoslakeid,nhd_long,nhd_lat,state_zoneid) %>%
+  summarise(n=n())
+
+# join data to include state names
+
+lake_states <- lagos$state
+lake_statecenters<-left_join(lake_centers,lake_states,"state_zoneid")
+
+# group by state and summarise to find total count
+lake_obsn <- lake_statecenters %>% 
+  group_by(state_name) %>% 
+  summarise(n=sum(n)) %>% 
+  arrange(desc(n)) %>% 
+  drop_na()
+
+states <- us_states() %>% 
+  mutate(state_name=name)
+
+# print table of counts
+kable(lake_obsn)
+
+# make map of counts by state
+lake_statecenterboundaries <- left_join(lake_obsn,states,"state_name") %>% 
+  drop_na()
+
+lake_countmap <- st_as_sf(lake_statecenterboundaries)
+
+mapview(lake_countmap,zcol='n')
+```
+
+## Is there a spatial pattern in Secchi disk depth for lakes with at least 200 observations?
+
+Lakes that were further from urban areas tended to have higher secchi depth disks, indicating clearer water. This could be due to nutrient runoff from high population areas leading to high amounts of chla, and lower visibility in the water.
+
+```{r}
+
+spatial_200 <- st_as_sf(left_join(chla_secchi_200,lake_centers,"lagoslakeid"),coords=c("nhd_long","nhd_lat"))
+
+mapview(spatial_200,zcol='secchi')
+
+```
